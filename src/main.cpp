@@ -224,7 +224,7 @@ void loop() {
     
     Serial.print("Roll:");
     Serial.println(remoteData.roll);
-    nextDisplay = millis() + 50;
+    nextDisplay = millis() + 500;
   }
   
   if (Serial1.available()) {
