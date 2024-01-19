@@ -3,10 +3,10 @@
 //#include <SoftwareSerial.h>
 //#include "printf.h"
 
-#define OLED_RESET 4
-Adafruit_SSD1306 display(OLED_RESET);
+//#define OLED_RESET 4
+//Adafruit_SSD1306 display(OLED_RESET);
 
-SoftwareSerial ltmSerial(8, 9);
+//SoftwareSerial Serial1(8, 9);
 
 String fixTypes[3] = {
   "NO",
@@ -15,16 +15,16 @@ String fixTypes[3] = {
 };
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
-  ltmSerial.begin(9600);
-
+  Serial1.begin(115200);
+/*
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.clearDisplay();
   display.display();
-
+*/
 //  printf_begin();
 }
 
@@ -153,7 +153,7 @@ float calc_dist(float flat1, float flon1, float flat2, float flon2)
 void loop() {
 
   if (millis() >= nextDisplay) {
-
+/*
     display.clearDisplay();
 
     display.setCursor(0,0);
@@ -190,13 +190,46 @@ void loop() {
 
 
     display.display();
+*/
 
+  //Serial prints
+    
+    Serial.print("Lat:");
+    Serial.println(remoteData.latitude);
+
+    
+    Serial.print("Lon:");
+    Serial.println(remoteData.longitude);
+
+    
+    Serial.print("HDOP:");
+    Serial.println(remoteData.hdop);
+
+    
+    Serial.print("Fix:");
+    Serial.println(fixTypes[remoteData.gpsFix]);
+
+    
+    Serial.print("Sat:");
+    Serial.println(remoteData.gpsSats);
+
+    
+    Serial.print("Spd:");
+    Serial.println(remoteData.groundSpeed);
+
+    
+    Serial.print("Alt:");
+    Serial.println(remoteData.altitude);
+
+    
+    Serial.print("Roll:");
+    Serial.println(remoteData.roll);
     nextDisplay = millis() + 50;
   }
   
-  if (ltmSerial.available()) {
+  if (Serial1.available()) {
 
-    char data = ltmSerial.read();
+    char data = Serial1.read();
 
     if (state == IDLE) {
       if (data == '$') {
