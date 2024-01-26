@@ -8,6 +8,23 @@
 
 // SoftwareSerial Serial1(8, 9);
 
+/* #################################################################################################################
+ * LightTelemetry protocol (LTM)
+ *
+ * Ghettostation one way telemetry protocol for really low bitrates (1200/2400 bauds). 
+ *			   
+ * Protocol details: 3 different frames, little endian.
+ *   G Frame (GPS position) (2hz @ 1200 bauds , 5hz >= 2400 bauds): 18BYTES
+ *    0x24 0x54 0x47 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF  0xFF   0xC0   
+ *     $     T    G  --------LAT-------- -------LON---------  SPD --------ALT-------- SAT/FIX  CRC
+ *   A Frame (Attitude) (5hz @ 1200bauds , 10hz >= 2400bauds): 10BYTES
+ *     0x24 0x54 0x41 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xC0   
+ *      $     T   A   --PITCH-- --ROLL--- -HEADING-  CRC
+ *   S Frame (Sensors) (2hz @ 1200bauds, 5hz >= 2400bauds): 11BYTES
+ *     0x24 0x54 0x53 0xFF 0xFF  0xFF 0xFF    0xFF    0xFF      0xFF       0xC0     
+ *      $     T   S   VBAT(mv)  Current(ma)   RSSI  AIRSPEED  ARM/FS/FMOD   CRC
+ * ################################################################################################################# */
+
 String fixTypes[3] = {
     "NO",
     "2D",
@@ -15,7 +32,7 @@ String fixTypes[3] = {
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(2400);
 
   Serial1.begin(115200);
   /*
@@ -43,8 +60,9 @@ enum ltmStates
  * LTM based on https://github.com/KipK/Ghettostation/blob/master/GhettoStation/LightTelemetry.cpp implementation
  */
 
+//define the length of each function type
 #define GFRAMELENGTH 18
-#define AFRAMELENGTH 10
+#define AFRAMELENGTH 10 //1 byte function, 6 byte payload, 3 byte CRC
 #define SFRAMELENGTH 11
 #define OFRAMELENGTH 18
 #define NFRAMELENGTH 10
@@ -74,9 +92,10 @@ const char *flightModes[] = {
 
 typedef struct remoteData_s
 {
-  int pitch;
-  int roll;
-  int heading;
+  //these should not be ints, they should be int16
+  int16_t pitch;
+  int16_t roll;
+  int16_t heading;
   uint16_t voltage;
   byte rssi;
   bool armed;
@@ -105,6 +124,7 @@ char frameType;
 byte frameLength;
 byte receiverIndex;
 
+//there might be something wrong with readByte() or readInt() 
 byte readByte(uint8_t offset)
 {
   return serialBuffer[offset];
@@ -114,6 +134,13 @@ int readInt(uint8_t offset)
 {
   return (int)serialBuffer[offset] + ((int)serialBuffer[offset + 1] << 8);
 }
+
+//added this because i think it is needed but wasn't used before
+int16_t readInt16(uint8_t offset)
+{
+  return (int16_t)serialBuffer[offset] + ((int16_t)serialBuffer[offset + 1] << 8);
+}
+
 
 int32_t readInt32(uint8_t offset)
 {
@@ -231,6 +258,9 @@ void loop()
 
     Serial.print("Roll:");
     Serial.println(remoteData.roll);
+
+    Serial.print("Pitch:");
+    Serial.println(remoteData.pitch);
     nextDisplay = millis() + 500;
   }
 
@@ -300,11 +330,15 @@ void loop()
          * If YES, check checksum and execute data processing
          */
 
-        if (frameType == 'A')
-        {
-          remoteData.pitch = readInt(0);
-          remoteData.roll = readInt(2);
-          remoteData.heading = readInt(4);
+        if (frameType == 'A') //this does not make sense these read uint8_t but it should read int16 as the payload is 6 bytes
+        {//TODO:find me
+          remoteData.pitch = readInt16(0);
+          remoteData.roll = readInt16(2);
+          remoteData.heading = readInt16(4);
+
+          // remoteData.pitch = readInt(0);
+          // remoteData.roll = readInt(2);
+          // remoteData.heading = readInt(4);
         }
 
         if (frameType == 'S')
