@@ -1,3 +1,5 @@
+//FIXME:MAKE SURE SWUTCH SB IS DOWN OTHERWISE NO DATA!!!!
+
 #include <Arduino.h>
 // #include <Adafruit_SSD1306.h>
 // #include <SoftwareSerial.h>
@@ -32,20 +34,11 @@ String fixTypes[3] = {
 
 void setup()
 {
-  Serial.begin(2400);
-
-  Serial1.begin(115200);
-  /*
-    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.clearDisplay();
-    display.display();
-  */
-  //  printf_begin();
+  Serial.begin(2400); //begin serial with pc
+  Serial1.begin(115200); //begin serial with tx16s
 }
 
-enum ltmStates
+enum ltmStates 
 {
   IDLE,
   HEADER_START1,
@@ -184,47 +177,7 @@ void loop()
 
   if (millis() >= nextDisplay)
   {
-    /*
-        display.clearDisplay();
-
-        display.setCursor(0,0);
-        display.print("Lat:");
-        display.print(remoteData.latitude);
-
-        display.setCursor(0,9);
-        display.print("Lon:");
-        display.print(remoteData.longitude);
-
-        display.setCursor(0,18);
-        display.print("HDOP:");
-        display.print(remoteData.hdop);
-
-        display.setCursor(0, 27);
-        display.print("Fix:");
-        display.print(fixTypes[remoteData.gpsFix]);
-
-        display.setCursor(64, 27);
-        display.print("Sat:");
-        display.print(remoteData.gpsSats);
-
-        display.setCursor(0, 36);
-        display.print("Spd:");
-        display.print(remoteData.groundSpeed);
-
-        display.setCursor(64, 36);
-        display.print("Alt:");
-        display.print(remoteData.altitude);
-
-        display.setCursor(0, 45);
-        display.print("Roll:");
-        display.print(remoteData.roll);
-
-
-        display.display();
-    */
-
     // Serial prints
-
     Serial.print("Lat:");
     Serial.println(remoteData.latitude);
 
@@ -264,19 +217,21 @@ void loop()
     nextDisplay = millis() + 500;
   }
 
+
   if (Serial1.available())
   {
 
     char data = Serial1.read();
+    //Serial.println(data);
 
     if (state == IDLE)
     {
-      if (data == '$')
+      if (data == '$') //if $then start of new info
       {
         state = HEADER_START1;
       }
     }
-    else if (state == HEADER_START1)
+    else if (state == HEADER_START1) //T means next char is payload type
     {
       if (data == 'T')
       {
@@ -293,7 +248,7 @@ void loop()
       state = HEADER_MSGTYPE;
       receiverIndex = 0;
 
-      switch (data)
+      switch (data) //data is payload type
       {
 
       case 'G':
