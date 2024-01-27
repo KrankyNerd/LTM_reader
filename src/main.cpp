@@ -1,4 +1,4 @@
-//FIXME:MAKE SURE SWUTCH SB IS DOWN OTHERWISE NO DATA!!!!
+//FIXME:MAKE SURE SWITCH SB IS DOWN OTHERWISE NO DATA!!!!
 
 #include <Arduino.h>
 
@@ -20,6 +20,7 @@
  * ################################################################################################################# */
 /*
  LTM based on https://github.com/KipK/Ghettostation/blob/master/GhettoStation/LightTelemetry.cpp implementation
+ https://github.com/iNavFlight/inav/wiki/Lightweight-Telemetry-(LTM)
 */
 
 enum LTMStates
@@ -44,25 +45,34 @@ const int X_FRAME_LENGTH = 10;
 //define the data type of each variable, this should match up with the LTM docs
 typedef struct RemoteData_s
 {
+  //A frame (attitude) 6 bytes total
   int16_t pitch;
   int16_t roll;
   int16_t heading;
-  uint16_t voltage;
-  byte rssi;
+
+  //S frame (status) 7 bytes
+  uint16_t voltage;   //2 bytes
+  byte rssi;          //1 byte
   bool armed;
   bool failsafe;
   byte flightmode;
+  
+  //G frame (GPS) 14 bytes //something in here is wrong me thinks
+  int32_t latitude;   //4 bytes
+  int32_t longitude;  //4 bytes
+  int32_t altitude;   //4 bytes
+  uint8_t groundSpeed;//1 byte
 
-  int32_t latitude;
-  int32_t longitude;
-  int32_t altitude;
-  uint8_t groundSpeed;
-  int16_t hdop;
+  int16_t hdop; //part of X frame
   uint8_t gpsFix;
   uint8_t gpsSats;
 
-  int32_t homeLatitude;
-  int32_t homeLongitude;
+  //O frame (origin) 14 bytes
+  int32_t homeLatitude;   //4 bytes
+  int32_t homeLongitude;  //4 bytes
+  uint32_t homeAltitude;  //4 bytes
+  uint8_t OSD;            //1 byte //these are the same as uchar
+  uint8_t homeFix;        //1 byte 
 
   uint8_t sensorStatus;
 } RemoteData_t;
@@ -102,14 +112,14 @@ int32_t readInt32(uint8_t offset)
 
 void parseFrame()
 {
-  if (frameType == 'A')
+  if (frameType == 'A') //attitude
   {
     remoteData.pitch = readInt16(0);
     remoteData.roll = readInt16(2);
     remoteData.heading = readInt16(4);
   }
 
-  if (frameType == 'S')
+  if (frameType == 'S') //status
   {
     remoteData.voltage = readInt(0);
     remoteData.rssi = readByte(4);
@@ -118,7 +128,7 @@ void parseFrame()
     remoteData.flightmode = raw >> 2;
   }
 
-  if (frameType == 'G')
+  if (frameType == 'G') //gps this works
   {
     remoteData.latitude = readInt32(0);
     remoteData.longitude = readInt32(4);
@@ -132,9 +142,13 @@ void parseFrame()
 
   if (frameType == 'X')
   {
-    remoteData.hdop = readInt(0);
+    remoteData.hdop = readInt(0);//FIXME: I think this should be uint16
     remoteData.sensorStatus = readByte(2);
   }
+
+  if(frameType == 'O');
+
+  if(frameType == 'N');
 }
 
 void readData()
@@ -196,7 +210,7 @@ void readData()
     {
       if (receiverIndex == frameLength - 4)
       {
-        parseFrame();
+        parseFrame(); //parse the data
         state = IDLE;
         memset(serialBuffer, 0, LONGEST_FRAME_LENGTH);
       }
@@ -255,14 +269,14 @@ void setup()
   Serial1.begin(115200); //begin serial with tx16s
 }
 
+unsigned long nextDisplay = 0;
+
 void loop()
-{
-  unsigned long nextDisplay = 0;
-  
+{ 
+  readData();
   if (millis() >= nextDisplay)
   {
-    readData();
     serialPrintData();
-    nextDisplay = millis() + 5000;
+    nextDisplay = millis() + 500;
   }
 }
