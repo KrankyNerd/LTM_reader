@@ -2,6 +2,19 @@
 //use read int to read uint16
 #include <Arduino.h>
 
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+//-----------------start display stuff------------------
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+
 /* #################################################################################################################
  * LightTelemetry protocol (LTM)
  *
@@ -271,10 +284,42 @@ void serialPrintData()
   Serial.println(remoteData.rssi);
 }
 
+void displayTelem()
+{
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  display.setCursor(0, 0);     // Start at top-left corner
+  //display.cp437(true);         // Use full 256 char 'Code Page 437' font
+  display.println(F("Voltage:"));
+  display.print(remoteData.voltage/1000.);
+
+  display.display();
+}
+
 void setup()
 {
   Serial.begin(2400);    // begin serial with pc
   Serial1.begin(115200); // begin serial with tx16s
+  //while(!Serial);
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  // display.display();
+  // delay(2000); // Pause for 2 seconds
+
+  // // Clear the buffer
+  // display.clearDisplay();
+
+  // // Draw a single pixel in white
+  // display.drawPixel(10, 10, SSD1306_WHITE);
+  // Serial.println("Init display");
+
+  // // Show the display buffer on the screen. You MUST call display() after
+  // // drawing commands to make them visible on screen!
+  // display.display();
+  // delay(2000);
 }
 
 unsigned long nextDisplay = 0;
@@ -285,6 +330,7 @@ void loop()
   if (millis() >= nextDisplay)
   {
     serialPrintData();
+    displayTelem();
     nextDisplay = millis() + 500;
   }
 }
