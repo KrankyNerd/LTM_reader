@@ -182,7 +182,7 @@ void readData()
       state = HEADER_MSGTYPE;
       receiverIndex = 0;
 
-      switch (data)
+      switch (data)//based on the data in the header_start 2, figure out the length of the frame
       {
       case 'G':
         frameLength = G_FRAME_LENGTH;
@@ -203,22 +203,28 @@ void readData()
         frameLength = X_FRAME_LENGTH;
         break;
       default:
-        state = IDLE;
+        state = IDLE; // Reset to IDLE on invalid frame type
       }
     }
     else if (state == HEADER_MSGTYPE)
-    {
-      if (receiverIndex == frameLength - 4)
-      {
-        parseFrame(); //parse the data
-        state = IDLE;
-        memset(serialBuffer, 0, LONGEST_FRAME_LENGTH);
-      }
-      else
-      {
-        serialBuffer[receiverIndex++] = data;
-      }
-    }
+{
+  if (receiverIndex == frameLength - 4)
+  {
+    parseFrame();
+    state = IDLE;
+    memset(serialBuffer, 0, LONGEST_FRAME_LENGTH);
+  }
+  else if (receiverIndex >= LONGEST_FRAME_LENGTH)
+  {
+    // Buffer overflow, reset state to IDLE
+    state = IDLE;
+  }
+  else
+  {
+    serialBuffer[receiverIndex++] = data;
+  }
+}
+
   }
 }
 
