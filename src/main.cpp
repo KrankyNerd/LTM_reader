@@ -18,19 +18,11 @@
  *     0x24 0x54 0x53 0xFF 0xFF  0xFF 0xFF    0xFF    0xFF      0xFF       0xC0     
  *      $     T   S   VBAT(mv)  Current(ma)   RSSI  AIRSPEED  ARM/FS/FMOD   CRC
  * ################################################################################################################# */
+/*
+ LTM based on https://github.com/KipK/Ghettostation/blob/master/GhettoStation/LightTelemetry.cpp implementation
+*/
 
-String fixTypes[3] = {
-    "NO",
-    "2D",
-    "3D"};
-
-void setup()
-{
-  Serial.begin(2400); //begin serial with pc
-  Serial1.begin(115200); //begin serial with tx16s
-}
-
-enum ltmStates 
+enum LTMStates
 {
   IDLE,
   HEADER_START1,
@@ -39,45 +31,19 @@ enum ltmStates
   HEADER_DATA
 };
 
-#define LONGEST_FRAME_LENGTH 18
-
-/*
- * LTM based on https://github.com/KipK/Ghettostation/blob/master/GhettoStation/LightTelemetry.cpp implementation
- */
+const int LONGEST_FRAME_LENGTH = 18;
 
 //define the length of each frame type
-#define GFRAMELENGTH 18
-#define AFRAMELENGTH 10 //1 byte function, 6 byte payload, 3 byte CRC
-#define SFRAMELENGTH 11
-#define OFRAMELENGTH 18
-#define NFRAMELENGTH 10
-#define XFRAMELENGTH 10
+const int G_FRAME_LENGTH = 18;
+const int A_FRAME_LENGTH = 10; //1 byte function, 6 byte payload, 3 byte CRC
+const int S_FRAME_LENGTH = 11;
+const int O_FRAME_LENGTH = 18;
+const int N_FRAME_LENGTH = 10;
+const int X_FRAME_LENGTH = 10;
 
-const char *flightModes[] = {
-    "Manual",
-    "Rate",
-    "Angle",
-    "Horizon",
-    "Acro",
-    "Stabilized1",
-    "Stabilized2",
-    "Stabilized3",
-    "Altitude Hold",
-    "GPS Hold",
-    "Waypoints",
-    "Head free",
-    "Circle",
-    "RTH",
-    "Follow me",
-    "Land",
-    "Fly by wire A",
-    "Fly by wire B",
-    "Cruise",
-    "Unknown"};
-
-typedef struct remoteData_s
+//define the data type of each variable, this should match up with the LTM docs
+typedef struct RemoteData_s
 {
-  //these should not be ints, they should be int16
   int16_t pitch;
   int16_t roll;
   int16_t heading;
@@ -99,9 +65,9 @@ typedef struct remoteData_s
   int32_t homeLongitude;
 
   uint8_t sensorStatus;
-} remoteData_t;
+} RemoteData_t;
 
-remoteData_t remoteData;
+RemoteData_t remoteData;
 
 uint8_t serialBuffer[LONGEST_FRAME_LENGTH];
 uint8_t state = IDLE;
@@ -109,7 +75,11 @@ char frameType;
 byte frameLength;
 byte receiverIndex;
 
-//there might be something wrong with readByte() or readInt() 
+String fixTypes[3] = {
+    "NO",
+    "2D",
+    "3D"};
+
 byte readByte(uint8_t offset)
 {
   return serialBuffer[offset];
@@ -120,55 +90,126 @@ int readInt(uint8_t offset)
   return (int)serialBuffer[offset] + ((int)serialBuffer[offset + 1] << 8);
 }
 
-//added this because i think it is needed but wasn't used before
 int16_t readInt16(uint8_t offset)
 {
   return (int16_t)serialBuffer[offset] + ((int16_t)serialBuffer[offset + 1] << 8);
 }
-
 
 int32_t readInt32(uint8_t offset)
 {
   return (int32_t)serialBuffer[offset] + ((int32_t)serialBuffer[offset + 1] << 8) + ((int32_t)serialBuffer[offset + 2] << 16) + ((int32_t)serialBuffer[offset + 3] << 24);
 }
 
-uint32_t nextDisplay = 0;
-
-/*************************************************************************
- * //Function to calculate the distance between two waypoints
- *************************************************************************/
-float calc_dist(float flat1, float flon1, float flat2, float flon2)
+void parseFrame()
 {
-  float dist_calc = 0;
-  float dist_calc2 = 0;
-  float diflat = 0;
-  float diflon = 0;
+  if (frameType == 'A')
+  {
+    remoteData.pitch = readInt16(0);
+    remoteData.roll = readInt16(2);
+    remoteData.heading = readInt16(4);
+  }
 
-  // I've to spplit all the calculation in several steps. If i try to do it in a single line the arduino will explode.
-  diflat = radians(flat2 - flat1);
-  flat1 = radians(flat1);
-  flat2 = radians(flat2);
-  diflon = radians((flon2) - (flon1));
+  if (frameType == 'S')
+  {
+    remoteData.voltage = readInt(0);
+    remoteData.rssi = readByte(4);
 
-  dist_calc = (sin(diflat / 2.0) * sin(diflat / 2.0));
-  dist_calc2 = cos(flat1);
-  dist_calc2 *= cos(flat2);
-  dist_calc2 *= sin(diflon / 2.0);
-  dist_calc2 *= sin(diflon / 2.0);
-  dist_calc += dist_calc2;
+    byte raw = readByte(6);
+    remoteData.flightmode = raw >> 2;
+  }
 
-  dist_calc = (2 * atan2(sqrt(dist_calc), sqrt(1.0 - dist_calc)));
+  if (frameType == 'G')
+  {
+    remoteData.latitude = readInt32(0);
+    remoteData.longitude = readInt32(4);
+    remoteData.groundSpeed = readByte(8);
+    remoteData.altitude = readInt32(9);
 
-  dist_calc *= 6371000.0; // Converting to meters
-  // Serial.println(dist_calc);
-  return dist_calc;
+    uint8_t raw = readByte(13);
+    remoteData.gpsSats = raw >> 2;
+    remoteData.gpsFix = raw & 0x03;
+  }
+
+  if (frameType == 'X')
+  {
+    remoteData.hdop = readInt(0);
+    remoteData.sensorStatus = readByte(2);
+  }
 }
 
-void loop()
+void readData()
 {
-
-  if (millis() >= nextDisplay)
+  if (Serial1.available())
   {
+    char data = Serial1.read();
+    //Serial.println(data);
+
+    if (state == IDLE)
+    {
+      if (data == '$')
+      {
+        state = HEADER_START1;
+      }
+    }
+    else if (state == HEADER_START1)
+    {
+      if (data == 'T')
+      {
+        state = HEADER_START2;
+      }
+      else
+      {
+        state = IDLE;
+      }
+    }
+    else if (state == HEADER_START2)
+    {
+      frameType = data;
+      state = HEADER_MSGTYPE;
+      receiverIndex = 0;
+
+      switch (data)
+      {
+      case 'G':
+        frameLength = G_FRAME_LENGTH;
+        break;
+      case 'A':
+        frameLength = A_FRAME_LENGTH;
+        break;
+      case 'S':
+        frameLength = S_FRAME_LENGTH;
+        break;
+      case 'O':
+        frameLength = O_FRAME_LENGTH;
+        break;
+      case 'N':
+        frameLength = N_FRAME_LENGTH;
+        break;
+      case 'X':
+        frameLength = X_FRAME_LENGTH;
+        break;
+      default:
+        state = IDLE;
+      }
+    }
+    else if (state == HEADER_MSGTYPE)
+    {
+      if (receiverIndex == frameLength - 4)
+      {
+        parseFrame();
+        state = IDLE;
+        memset(serialBuffer, 0, LONGEST_FRAME_LENGTH);
+      }
+      else
+      {
+        serialBuffer[receiverIndex++] = data;
+      }
+    }
+  }
+}
+
+void serialPrintData()
+{
     // Serial prints
     Serial.print("Lat:");
     Serial.println(remoteData.latitude);
@@ -206,125 +247,22 @@ void loop()
 
     Serial.print("Pitch:");
     Serial.println(remoteData.pitch);
-    nextDisplay = millis() + 500;
-  }
+}
 
+void setup()
+{
+  Serial.begin(2400); //begin serial with pc
+  Serial1.begin(115200); //begin serial with tx16s
+}
 
-  if (Serial1.available())
+void loop()
+{
+  unsigned long nextDisplay = 0;
+  
+  if (millis() >= nextDisplay)
   {
-
-    char data = Serial1.read();
-    //Serial.println(data);
-
-    if (state == IDLE)
-    {
-      if (data == '$') //if $then start of new info
-      {
-        state = HEADER_START1;
-      }
-    }
-    else if (state == HEADER_START1) //T means next char is payload type
-    {
-      if (data == 'T')
-      {
-        state = HEADER_START2;
-      }
-      else
-      {
-        state = IDLE;
-      }
-    }
-    else if (state == HEADER_START2)
-    {
-      frameType = data;
-      state = HEADER_MSGTYPE;
-      receiverIndex = 0;
-
-      switch (data) //data is payload type
-      {
-
-      case 'G':
-        frameLength = GFRAMELENGTH;
-        break;
-      case 'A':
-        frameLength = AFRAMELENGTH;
-        break;
-      case 'S':
-        frameLength = SFRAMELENGTH;
-        break;
-      case 'O':
-        frameLength = OFRAMELENGTH;
-        break;
-      case 'N':
-        frameLength = NFRAMELENGTH;
-        break;
-      case 'X':
-        frameLength = XFRAMELENGTH;
-        break;
-      default:
-        state = IDLE;
-      }
-    }
-    else if (state == HEADER_MSGTYPE)
-    {
-
-      /*
-       * Check if last payload byte has been received.
-       */
-      if (receiverIndex == frameLength - 4)
-      {
-        /*
-         * If YES, check checksum and execute data processing
-         */
-
-        if (frameType == 'A') //this does not make sense these read uint8_t but it should read int16 as the payload is 6 bytes
-        {//TODO:find me
-          remoteData.pitch = readInt16(0);
-          remoteData.roll = readInt16(2);
-          remoteData.heading = readInt16(4);
-
-          // remoteData.pitch = readInt(0);
-          // remoteData.roll = readInt(2);
-          // remoteData.heading = readInt(4);
-        }
-
-        if (frameType == 'S')
-        {
-          remoteData.voltage = readInt(0);
-          remoteData.rssi = readByte(4);
-
-          byte raw = readByte(6);
-          remoteData.flightmode = raw >> 2;
-        }
-
-        if (frameType == 'G')
-        {
-          remoteData.latitude = readInt32(0);
-          remoteData.longitude = readInt32(4);
-          remoteData.groundSpeed = readByte(8);
-          remoteData.altitude = readInt32(9);
-
-          uint8_t raw = readByte(13);
-          remoteData.gpsSats = raw >> 2;
-          remoteData.gpsFix = raw & 0x03;
-        }
-
-        if (frameType == 'X')
-        {
-          remoteData.hdop = readInt(0);
-          remoteData.sensorStatus = readByte(2);
-        }
-
-        state = IDLE;
-        memset(serialBuffer, 0, LONGEST_FRAME_LENGTH);
-      }
-      else
-      {
-        /*
-         * If no, put data into buffer
-         */
-        serialBuffer[receiverIndex++] = data;
-      }
-    }
+    readData();
+    serialPrintData();
+    nextDisplay = millis() + 5000;
   }
 }
