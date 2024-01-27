@@ -1,14 +1,6 @@
 //FIXME:MAKE SURE SWUTCH SB IS DOWN OTHERWISE NO DATA!!!!
 
 #include <Arduino.h>
-// #include <Adafruit_SSD1306.h>
-// #include <SoftwareSerial.h>
-// #include "printf.h"
-
-// #define OLED_RESET 4
-// Adafruit_SSD1306 display(OLED_RESET);
-
-// SoftwareSerial Serial1(8, 9);
 
 /* #################################################################################################################
  * LightTelemetry protocol (LTM)
@@ -53,7 +45,7 @@ enum ltmStates
  * LTM based on https://github.com/KipK/Ghettostation/blob/master/GhettoStation/LightTelemetry.cpp implementation
  */
 
-//define the length of each function type
+//define the length of each frame type
 #define GFRAMELENGTH 18
 #define AFRAMELENGTH 10 //1 byte function, 6 byte payload, 3 byte CRC
 #define SFRAMELENGTH 11
