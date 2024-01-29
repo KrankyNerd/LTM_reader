@@ -47,6 +47,7 @@ String batteryString = "Default";   //string that will be sent via bt
 
 //----------end ble stuff
 
+//------------------------LTM stuff---------------------
 /* #################################################################################################################
  * LightTelemetry protocol (LTM)
  *
@@ -135,6 +136,8 @@ String fixTypes[3] = {
     "NO",
     "2D",
     "3D"};
+
+//--------------------------end LTM stuff--------------------------
 
 byte readByte(uint8_t offset)
 {
@@ -367,13 +370,8 @@ void sendBLE()
   }
 }
 
-void setup()
+void setupBLE()
 {
-  Serial.begin(2400);    // begin serial with pc
-  Serial1.begin(115200); // begin serial with tx16s
-  //while(!Serial);
-
-  //BLE stuff--------------------------
   if (!BLE.begin()) {
     Serial.println("Starting BLE failed!");
     while (1);
@@ -388,10 +386,10 @@ void setup()
   BLE.advertise(); // Start advertising
 
   Serial.println("BLE Peripheral - Waiting for connections...");
+}
 
-//-----------end BLE stuff
-
-//-------------OLED stuff--------------
+void setupDisplay()
+{
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
@@ -411,20 +409,30 @@ void setup()
   // Show the display buffer on the screen. You MUST call display() after
   // drawing commands to make them visible on screen!
   display.display();
-  delay(2000);
-  //-------------------end oled stuff---------
 }
 
-unsigned long nextDisplay = 0;
+void setup()
+{
+  Serial.begin(2400);    // begin serial with pc
+  Serial1.begin(115200); // begin serial with tx16s
+  //while(!Serial);
+  
+  setupBLE();
+  setupDisplay();
+
+  delay(2000);//wait for setup to finish just in case
+}
+
+unsigned long nextDisplay = 0; //long for the time of when to next do the display update
 
 void loop()
 {
   readData();
-  if (millis() >= nextDisplay)
+  if (millis() >= nextDisplay) //if current time is greater than or equal to time we want to update displays
   {
     serialPrintData();
     displayTelem();
     sendBLE();
-    nextDisplay = millis() + 500;
+    nextDisplay = millis() + 500; //set new update time
   }
 }
