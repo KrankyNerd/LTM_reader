@@ -33,7 +33,19 @@ static const unsigned char PROGMEM logo_bmp[] =
   0b01111100, 0b11110000,
   0b01110000, 0b01110000,
   0b00000000, 0b00110000 };
+//------------------end OLED stuff----------------
 
+//----------start BLE stuff
+#include <ArduinoBLE.h>
+
+BLEService customService("19B10000-E8F2-537E-4F6C-D104768A1214"); // create a custom service
+BLEStringCharacteristic GPS("19B10001-E8F2-537E-4F6C-D104768A1215", BLERead | BLENotify, 20); // create the first custom characteristic with a unique UUID
+BLEStringCharacteristic Battery("19B10002-E8F2-537E-4F6C-D104768A1216", BLERead | BLENotify, 20); // create the second custom characteristic with a unique UUID
+
+String GPSString = "Default";       //string that will be sent via bt
+String batteryString = "Default";   //string that will be sent via bt
+
+//----------end ble stuff
 
 /* #################################################################################################################
  * LightTelemetry protocol (LTM)
@@ -331,12 +343,55 @@ void displayTelem()
   display.display();
 }
 
+void sendBLE()
+{
+  BLEDevice central = BLE.central(); // Wait for a BLE central
+
+  if (central) {
+    Serial.print("Connected to central: ");
+    Serial.println(central.address());
+
+    while (central.connected()) {
+      //FIXME: the strings are too long and are being truncated
+      //you can increase the ATT_MTU but realistally you would send integers or smthn and then have an app that knows the UUID of each characteristic read the data
+      // Send strings of data
+      GPSString = "Lat: " + String(remoteData.latitude) + " Long: " + String(remoteData.longitude);
+      batteryString = "Voltage: " + String(remoteData.voltage) + "V "+ "Battery Consumption: " + String(remoteData.batteryConsumption) + "mAh";
+      GPS.writeValue(GPSString);
+      Battery.writeValue(batteryString);
+
+      //delay(1000); // Adjust the delay according to your needs
+    }
+    Serial.print("Disconnected from central: ");
+    Serial.println(central.address());
+  }
+}
+
 void setup()
 {
   Serial.begin(2400);    // begin serial with pc
   Serial1.begin(115200); // begin serial with tx16s
   //while(!Serial);
 
+  //BLE stuff--------------------------
+  if (!BLE.begin()) {
+    Serial.println("Starting BLE failed!");
+    while (1);
+  }
+
+  BLE.setLocalName("TX16s Telem");  // Set the local name advertised by the BLE peripheral
+  BLE.setAdvertisedService(customService); // Advertise the custom service
+  customService.addCharacteristic(GPS); // Add the first custom characteristic
+  customService.addCharacteristic(Battery); // Add the second custom characteristic
+  BLE.addService(customService); // Add the service
+
+  BLE.advertise(); // Start advertising
+
+  Serial.println("BLE Peripheral - Waiting for connections...");
+
+//-----------end BLE stuff
+
+//-------------OLED stuff--------------
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
@@ -357,6 +412,7 @@ void setup()
   // drawing commands to make them visible on screen!
   display.display();
   delay(2000);
+  //-------------------end oled stuff---------
 }
 
 unsigned long nextDisplay = 0;
@@ -368,6 +424,7 @@ void loop()
   {
     serialPrintData();
     displayTelem();
+    sendBLE();
     nextDisplay = millis() + 500;
   }
 }
