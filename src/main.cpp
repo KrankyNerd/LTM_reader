@@ -81,7 +81,7 @@ enum LTMStates
 const int LONGEST_FRAME_LENGTH = 18;
 
 // define the length of each frame type
-const int G_FRAME_LENGTH = 18;
+const int G_FRAME_LENGTH = 18; // 1 byte header, 14 byte payload, 3 byte CRC
 const int A_FRAME_LENGTH = 10; // 1 byte function, 6 byte payload, 3 byte CRC
 const int S_FRAME_LENGTH = 11;
 const int O_FRAME_LENGTH = 18;
@@ -107,9 +107,9 @@ typedef struct RemoteData_s
   // G frame (GPS) 14 bytes //something in here is wrong me thinks
   int32_t latitude;    // 4 bytes
   int32_t longitude;   // 4 bytes
-  int32_t altitude;    // 4 bytes
-  uint8_t groundSpeed; // 1 byte
-
+  uint8_t groundSpeed; // 1 byte //can be read as readbyte or uchar
+  int32_t altitude;    // 4 bytes //is actually signed these days
+                       // 1 byte Sats (bits 0-1:fix, bits 2-7: num of sats)
   int16_t hdop; // part of X frame
   uint8_t gpsFix;
   uint8_t gpsSats;
@@ -139,6 +139,34 @@ String fixTypes[3] = {
 
 //--------------------------end LTM stuff--------------------------
 
+//following is BS for prj requirements it does nothing useful
+int recAlt [60]; //array to store recent alt data
+unsigned char count = 0;
+
+void storeAltRec()
+{
+  static unsigned long previousMillis = 0;
+  unsigned long currentMillis = millis();
+  #define duration 1000
+  
+  if (currentMillis - previousMillis > duration) //if time elapsed write current altitude to array
+  {
+    recAlt[count] = remoteData.altitude;
+    count++;
+    if (count >=60)
+      count = 0;
+  }
+}
+
+float getRecAltAvg() //this calculated the Avg altitude over the last 60 seconds
+{
+  float sum;
+  for(int i = 0; i < 60; i++) //sum all altitudes
+    sum += recAlt[i];
+  sum = sum/60; //sum/ 60 units
+  return sum; //this is the AVg altitude over the last 60 seconds
+}
+
 byte readByte(uint8_t offset)
 {
   return serialBuffer[offset];
@@ -161,14 +189,14 @@ int32_t readInt32(uint8_t offset)
 
 void parseFrame()
 {
-  if (frameType == 'A') // attitude //FIXME:
+  if (frameType == 'A') // attitude 6 bytes //FIXME: this might work, I am not quite sure should be in degrees
   {
     remoteData.pitch = readInt16(0);
     remoteData.roll = readInt16(2);
     remoteData.heading = readInt16(4);
   }
 
-  if (frameType == 'S') // status
+  if (frameType == 'S') // status payload 7 bytes
   {
     remoteData.voltage = readInt(0); //this part works
     remoteData.batteryConsumption = readInt(2); //this works
@@ -180,26 +208,26 @@ void parseFrame()
 
   if (frameType == 'G') // gps this works
   {
-    remoteData.latitude = readInt32(0);
-    remoteData.longitude = readInt32(4);
-    remoteData.groundSpeed = readByte(8);
-    remoteData.altitude = readInt32(9);
+    remoteData.latitude = readInt32(0); //works
+    remoteData.longitude = readInt32(4); //works
+    remoteData.groundSpeed = readByte(8); //idk if this works?
+    remoteData.altitude = readInt32(9); //this does not work quite right
 
     uint8_t raw = readByte(13);
-    remoteData.gpsSats = raw >> 2;
-    remoteData.gpsFix = raw & 0x03;
+    remoteData.gpsSats = raw >> 2; //sats work
+    remoteData.gpsFix = raw & 0x03; //fix works
   }
 
-  if (frameType == 'X')
+  if (frameType == 'X') //xtra gps stuff //not finished TODO:
   {
     remoteData.hdop = readInt(0); //its a uint therefore read int rather than int16
     remoteData.sensorStatus = readByte(2);
   }
 
-  if (frameType == 'O')
+  if (frameType == 'O') // Origin TODO:not started
     ;
 
-  if (frameType == 'N')
+  if (frameType == 'N') //Navigation frame TODO:not started
     ;
 }
 
@@ -317,6 +345,9 @@ void serialPrintData()
 
   Serial.print("RSSI:"); //is correct
   Serial.println(remoteData.rssi);
+
+  Serial.print("Avg Recent Altitude: "); //works
+  Serial.println(getRecAltAvg());
 }
 
 void displayTelem()
@@ -427,12 +458,13 @@ unsigned long nextDisplay = 0; //long for the time of when to next do the displa
 
 void loop()
 {
-  readData();
+  readData(); //read and parse data
+  storeAltRec(); //do the dumb storing recent altitude data in array
   if (millis() >= nextDisplay) //if current time is greater than or equal to time we want to update displays
   {
-    serialPrintData();
-    displayTelem();
-    sendBLE();
+    serialPrintData(); //serial print data
+    displayTelem(); //display telem data on ssd1306 display
+    sendBLE(); //send data via BLE
     nextDisplay = millis() + 500; //set new update time
   }
 }
