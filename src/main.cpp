@@ -385,7 +385,7 @@ void sendBLE()
     Serial.print("Connected to central: ");
     Serial.println(central.address());
 
-    while (central.connected()) {
+    while (central.connected()) {//TODO: change to if
       //FIXME: the strings are too long and are being truncated
       //you can increase the ATT_MTU but realistally you would send integers or smthn and then have an app that knows the UUID of each characteristic read the data
       // Send strings of data
